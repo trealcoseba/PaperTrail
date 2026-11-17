@@ -6,6 +6,7 @@ from .models import DocumentRequest, DocumentStageLog
 from apps.workflows.models import WorkflowTemplate, WorkflowTemplateStep
 from apps.offices.models import Office
 from apps.notifications.models import Notification
+from django.db.models import Q
 
 def ensure_default_workflow_steps(template):
     """Guarantees that a template always has all 5 required sequential stages."""
@@ -202,4 +203,30 @@ def process_document_view(request, tracking_number):
         "document": doc,
         "current_step": current_step,
         "next_step": next_step,
+    })
+
+@login_required
+def search_documents_view(request):
+    """Search & Filter documents by tracking number, title, purpose, or status."""
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "").strip()
+
+    results = DocumentRequest.objects.all().order_by("-submitted_at")
+
+    if query:
+        results = results.filter(
+            Q(tracking_number__icontains=query) |
+            Q(document_title__icontains=query) |
+            Q(purpose__icontains=query) |
+            Q(student__username__icontains=query)
+        )
+
+    if status_filter:
+        results = results.filter(status=status_filter)
+
+    return render(request, "documents/search.html", {
+        "results": results,
+        "query": query,
+        "status_filter": status_filter,
+        "result_count": results.count(),
     })

@@ -8,4 +8,5 @@ urlpatterns = [
     path("track/<str:tracking_number>/", views.tracker_view, name="track"),
     path("queue/", views.office_queue_view, name="queue"),                    
     path("process/<str:tracking_number>/", views.process_document_view, name="process"), 
+    path("search/", views.search_documents_view, name="search"),
 ]
