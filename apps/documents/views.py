@@ -107,3 +107,77 @@ def tracker_view(request, tracking_number):
         "current_step": current_step,
         "next_step": next_step,
     })
+
+# Append to the bottom of apps/documents/views.py
+
+@login_required
+def office_queue_view(request):
+    """Office Staff Dashboard: View all documents waiting at an office stage."""
+    all_documents = DocumentRequest.objects.all().order_by("-submitted_at")
+    pending_docs = all_documents.filter(status__in=["Submitted", "Under Review"])
+    returned_docs = all_documents.filter(status="Returned")
+    completed_docs = all_documents.filter(status__in=["Approved", "Released"])
+
+    return render(request, "documents/office_queue.html", {
+        "documents": all_documents,
+        "pending_count": pending_docs.count(),
+        "returned_count": returned_docs.count(),
+        "completed_count": completed_docs.count(),
+    })
+
+
+@login_required
+def process_document_view(request, tracking_number):
+    """Action Screen: Allows staff to Approve & Advance, or Return for Revision."""
+    doc = get_object_or_404(DocumentRequest, tracking_number=tracking_number)
+    steps = doc.template.steps.all().order_by("step_order")
+    current_step = steps.filter(step_order=doc.current_step_order).first()
+    next_step = steps.filter(step_order=doc.current_step_order + 1).first()
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        remarks = request.POST.get("remarks", "").strip()
+
+        if action == "approve":
+            # If there is another step, advance to next stage
+            if next_step:
+                doc.current_step_order += 1
+                doc.status = "Under Review"
+                action_text = f"Approved & Forwarded to {next_step.office.code}"
+            else:
+                doc.status = "Released"
+                action_text = "Final Approval & Released"
+
+            doc.save()
+
+            DocumentStageLog.objects.create(
+                document=doc,
+                step_order=doc.current_step_order,
+                office=current_step.office if current_step else doc.template.steps.first().office,
+                actor=request.user,
+                action_taken=action_text,
+                remarks=remarks if remarks else "Approved without remarks.",
+                entered_at=timezone.now()
+            )
+
+        elif action == "return":
+            doc.status = "Returned"
+            doc.save()
+
+            DocumentStageLog.objects.create(
+                document=doc,
+                step_order=doc.current_step_order,
+                office=current_step.office if current_step else doc.template.steps.first().office,
+                actor=request.user,
+                action_taken="Returned for Revision",
+                remarks=remarks if remarks else "Document returned: Additional requirements needed.",
+                entered_at=timezone.now()
+            )
+
+        return redirect("documents:track", tracking_number=doc.tracking_number)
+
+    return render(request, "documents/process_document.html", {
+        "document": doc,
+        "current_step": current_step,
+        "next_step": next_step,
+    })
