@@ -5,6 +5,7 @@ from django.utils import timezone
 from .models import DocumentRequest, DocumentStageLog
 from apps.workflows.models import WorkflowTemplate, WorkflowTemplateStep
 from apps.offices.models import Office
+from apps.notifications.models import Notification
 
 def ensure_default_workflow_steps(template):
     """Guarantees that a template always has all 5 required sequential stages."""
@@ -68,6 +69,13 @@ def create_document_view(request):
                 action_taken="Submitted for Review",
                 remarks="Document received into department chair queue.",
                 entered_at=timezone.now()
+            )
+
+            Notification.objects.create(
+                user=request.user,
+                document=doc,
+                title=f"Request Submitted: {doc.tracking_number}",
+                message=f"Your document '{doc.document_title}' has been submitted to {first_step.office.name}."
             )
 
         return redirect("documents:track", tracking_number=doc.tracking_number)
@@ -160,6 +168,13 @@ def process_document_view(request, tracking_number):
                 entered_at=timezone.now()
             )
 
+            Notification.objects.create(
+                user=request.user,
+                document=doc,
+                title=f"Request Submitted: {doc.tracking_number}",
+                message=f"Your document '{doc.document_title}' has been submitted to {first_step.office.name}."
+            )
+
         elif action == "return":
             doc.status = "Returned"
             doc.save()
@@ -172,6 +187,13 @@ def process_document_view(request, tracking_number):
                 action_taken="Returned for Revision",
                 remarks=remarks if remarks else "Document returned: Additional requirements needed.",
                 entered_at=timezone.now()
+            )
+
+            Notification.objects.create(
+                user=doc.student,
+                document=doc,
+                title=f"Action Required: {doc.tracking_number} Returned",
+                message=f"'{doc.document_title}' was returned by {current_step.office.name if current_step else 'Office'}. Reason: {remarks or 'Additional requirements needed.'}"
             )
 
         return redirect("documents:track", tracking_number=doc.tracking_number)
