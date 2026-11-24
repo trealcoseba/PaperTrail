@@ -13,6 +13,9 @@
         .badge { font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 6px; }
         .badge-pending { background: #fef3c7; color: #b45309; }
         .badge-approved { background: #dcfce7; color: #15803d; }
+        .badge-returned { background: #fee2e2; color: #991b1b; }
+        .btn-revise { background: #dc2626; color: white; padding: 0.5rem 0.9rem; border-radius: 6px; font-size: 0.85rem; font-weight: 700; text-decoration: none; }
+        .btn-revise:hover { background: #b91c1c; }
         .btn-track { background: #4f46e5; color: white; padding: 0.5rem 1rem; border-radius: 6px; font-size: 0.85rem; font-weight: 700; text-decoration: none; }
         .btn-new-main { display: inline-block; background: #4f46e5; color: white; padding: 0.7rem 1.4rem; border-radius: 8px; font-weight: 700; text-decoration: none; margin-top: 1rem; }
     </style>
@@ -70,10 +73,13 @@
                             <h4 style="font-size: 1rem; font-weight: 800; color: #0f172a; margin-top: 2px;">{{ doc.document_title }}</h4>
                             <span style="font-size: 0.8rem; color: #64748b;">Stage {{ doc.current_step_order }} of 5 &bull; {{ doc.submitted_at|date:"M d, Y" }}</span>
                         </div>
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <span class="badge {% if doc.status == 'Approved' or doc.status == 'Released' %}badge-approved{% else %}badge-pending{% endif %}">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <span class="badge {% if doc.status == 'Approved' or doc.status == 'Released' %}badge-approved{% elif doc.status == 'Returned' %}badge-returned{% else %}badge-pending{% endif %}">
                                 {{ doc.status }}
                             </span>
+                                {% if doc.status == 'Returned' %}
+                            <a href="{% url 'documents:revise' doc.tracking_number %}" class="btn-revise">Revise & Resubmit</a>
+                                {% endif %}
                             <a href="{% url 'documents:track' doc.tracking_number %}" class="btn-track">Track Progress →</a>
                         </div>
                     </div>

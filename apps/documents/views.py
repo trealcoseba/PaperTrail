@@ -230,3 +230,48 @@ def search_documents_view(request):
         "status_filter": status_filter,
         "result_count": results.count(),
     })
+
+@login_required
+def revise_document_view(request, tracking_number):
+    """Allows a student to view return remarks, edit details, and resubmit a Returned document."""
+    doc = get_object_or_404(DocumentRequest, tracking_number=tracking_number, student=request.user)
+    steps = doc.template.steps.all().order_by("step_order")
+    current_step = steps.filter(step_order=doc.current_step_order).first()
+    
+    # Get the latest return reason from stage logs
+    return_log = doc.stage_logs.filter(action_taken="Returned for Revision").order_by("-entered_at").first()
+
+    if request.method == "POST":
+        doc.document_title = request.POST.get("document_title", doc.document_title)
+        doc.purpose = request.POST.get("purpose", doc.purpose)
+        revision_note = request.POST.get("revision_note", "").strip()
+
+        doc.status = "Under Review"
+        doc.save()
+
+        target_office = current_step.office if current_step else steps.first().office
+
+        DocumentStageLog.objects.create(
+            document=doc,
+            step_order=doc.current_step_order,
+            office=target_office,
+            actor=request.user,
+            action_taken="Resubmitted after Revision",
+            remarks=revision_note if revision_note else "Student updated and resubmitted the document.",
+            entered_at=timezone.now()
+        )
+
+        Notification.objects.create(
+            user=request.user,
+            document=doc,
+            title=f"Document Resubmitted: {doc.tracking_number}",
+            message=f"'{doc.document_title}' has been resubmitted to {target_office.name} for review."
+        )
+
+        return redirect("documents:track", tracking_number=doc.tracking_number)
+
+    return render(request, "documents/revise.html", {
+        "document": doc,
+        "current_step": current_step,
+        "return_log": return_log,
+    })
