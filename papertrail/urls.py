@@ -25,5 +25,7 @@ urlpatterns = [
     path('settings/', include('apps.user_settings.urls')),
     path('documents/', include('apps.documents.urls')),
     path('notifications/', include('apps.notifications.urls')),
+    path('offices/', include('apps.offices.urls')),      
+    path('workflows/', include('apps.workflows.urls')),  
     path('', include('apps.home.urls')),
 ]

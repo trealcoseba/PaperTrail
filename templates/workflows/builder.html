@@ -1,0 +1,119 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperTrail - Workflow Builder</title>
+    <link rel="stylesheet" href="{% static 'css/home/home.css' %}">
+    <style>
+        .wf-wrap { max-width: 1050px; width: 100%; margin: 2rem auto; display: grid; grid-template-columns: 1fr 1.2fr; gap: 1.5rem; align-items: start; }
+        .panel { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+        .panel h2 { font-size: 1.35rem; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+        .panel p.sub { font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem; }
+        .form-group { margin-bottom: 0.9rem; }
+        .form-group label { display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 4px; }
+        .form-group input, .form-group select { width: 100%; padding: 0.55rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; background: white; }
+        .step-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; background: #f8fafc; padding: 0.65rem; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 0.5rem; }
+        .btn-build { width: 100%; background: #4f46e5; color: white; border: none; padding: 0.8rem; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 0.5rem; }
+        .btn-build:hover { background: #4338ca; }
+        .wf-card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 1.25rem; background: #f8fafc; margin-bottom: 1rem; }
+        .step-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 0.75rem; }
+        .step-pill { background: #e0e7ff; color: #3730a3; font-size: 0.72rem; font-weight: 700; padding: 4px 8px; border-radius: 6px; }
+        .arrow { color: #94a3b8; font-weight: 800; font-size: 0.8rem; }
+        .alert-ok { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 0.65rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; }
+        .alert-err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 0.65rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="brand"><span>📄</span> PaperTrail</div>
+            <div class="nav-links">
+                <a href="{% url 'home:home' %}">Home</a>
+                <a href="{% url 'documents:create' %}">New Request</a>
+                <a href="{% url 'documents:queue' %}">Office Queue</a>
+                <a href="{% url 'workflows:builder' %}" class="active">Workflows</a>
+                <a href="{% url 'offices:directory' %}">Offices</a>
+                <a href="{% url 'documents:search' %}">Search</a>
+                <a href="{% url 'notifications:list' %}">Notifications</a>
+                <a href="{% url 'profile:profile' %}">Profile</a>
+                <a href="{% url 'user_settings:settings' %}">Settings</a>
+                <a href="{% url 'home:logout' %}" class="btn-logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="wf-wrap">
+            <!-- Create Workflow Form -->
+            <div class="panel">
+                <h2>🛠️ 5-Stage Workflow Builder</h2>
+                <p class="sub">Define sequential office approval paths for a document type</p>
+
+                {% if success %}<div class="alert-ok">{{ success }}</div>{% endif %}
+                {% if error %}<div class="alert-err">{{ error }}</div>{% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label>Workflow / Document Type Title</label>
+                        <input type="text" name="title" placeholder="e.g. Org Event Permit, Shifting Form" required>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 0.5rem;">
+                        <div class="form-group">
+                            <label>Description</label>
+                            <input type="text" name="description" placeholder="Short routing notes">
+                        </div>
+                        <div class="form-group">
+                            <label>Target SLA (Days)</label>
+                            <input type="number" name="estimated_total_days" value="5" min="1" required>
+                        </div>
+                    </div>
+
+                    <label style="display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin: 0.5rem 0;">Sequential Stages (5 Steps)</label>
+
+                    {% for i in "12345" %}
+                    <div class="step-row">
+                        <select name="step{{ i }}_office" required>
+                            <option value="">Stage {{ i }} Office...</option>
+                            {% for off in offices %}
+                                <option value="{{ off.id }}">{{ off.code }} - {{ off.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" name="step{{ i }}_action" placeholder="Action (e.g. Review / Sign)" required>
+                    </div>
+                    {% endfor %}
+
+                    <button type="submit" class="btn-build">Create 5-Stage Workflow</button>
+                </form>
+            </div>
+
+            <!-- Active Workflows List -->
+            <div class="panel">
+                <h2>📋 Configured Workflow Templates</h2>
+                <p class="sub">Active approval sequences used by student requests</p>
+
+                {% for wf in workflows %}
+                    <div class="wf-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h4 style="font-size: 1rem; font-weight: 800; color: #0f172a;">{{ wf.title }}</h4>
+                            <span style="font-size: 0.75rem; font-weight: 700; color: #10b981; background: #dcfce7; padding: 3px 8px; border-radius: 6px;">SLA: {{ wf.estimated_total_days }} days</span>
+                        </div>
+                        <p style="font-size: 0.8rem; color: #64748b; margin-top: 4px;">{{ wf.description|default:"Standard sequential routing" }}</p>
+
+                        <div class="step-chain">
+                            {% for step in wf.steps.all %}
+                                <span class="step-pill">{{ step.step_order }}. {{ step.office.code }}</span>
+                                {% if not forloop.last %}<span class="arrow">→</span>{% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% empty %}
+                    <p style="color: #64748b;">No workflows configured yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>

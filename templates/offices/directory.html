@@ -1,0 +1,92 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperTrail - Campus Office Directory</title>
+    <link rel="stylesheet" href="{% static 'css/home/home.css' %}">
+    <style>
+        .page-wrap { max-width: 960px; width: 100%; margin: 2rem auto; display: grid; grid-template-columns: 1fr 1.6fr; gap: 1.5rem; align-items: start; }
+        .panel { background: white; padding: 2rem; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+        .panel h2 { font-size: 1.35rem; font-weight: 800; color: #1e293b; margin-bottom: 4px; }
+        .panel p.sub { font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem; }
+        .form-group { margin-bottom: 1rem; }
+        .form-group label { display: block; font-size: 0.8rem; font-weight: 700; color: #334155; margin-bottom: 4px; }
+        .form-group input { width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; }
+        .btn-add { width: 100%; background: #4f46e5; color: white; border: none; padding: 0.75rem; border-radius: 8px; font-weight: 700; cursor: pointer; }
+        .btn-add:hover { background: #4338ca; }
+        .office-card { display: flex; justify-content: space-between; align-items: center; padding: 1rem; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; margin-bottom: 0.75rem; }
+        .code-pill { background: #e0e7ff; color: #3730a3; font-weight: 800; font-size: 0.75rem; padding: 4px 10px; border-radius: 6px; }
+        .alert-ok { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 0.65rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; }
+        .alert-err { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 0.65rem; border-radius: 8px; font-size: 0.85rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="brand"><span>📄</span> PaperTrail</div>
+            <div class="nav-links">
+                <a href="{% url 'home:home' %}">Home</a>
+                <a href="{% url 'documents:create' %}">New Request</a>
+                <a href="{% url 'documents:queue' %}">Office Queue</a>
+                <a href="{% url 'workflows:builder' %}">Workflows</a>
+                <a href="{% url 'offices:directory' %}" class="active">Offices</a>
+                <a href="{% url 'documents:search' %}">Search</a>
+                <a href="{% url 'notifications:list' %}">Notifications</a>
+                <a href="{% url 'profile:profile' %}">Profile</a>
+                <a href="{% url 'user_settings:settings' %}">Settings</a>
+                <a href="{% url 'home:logout' %}" class="btn-logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="page-wrap">
+            <!-- Add Office Form -->
+            <div class="panel">
+                <h2>➕ Add Campus Office</h2>
+                <p class="sub">Register a department or signing unit</p>
+
+                {% if success %}<div class="alert-ok">{{ success }}</div>{% endif %}
+                {% if error %}<div class="alert-err">{{ error }}</div>{% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label>Office Code (Short)</label>
+                        <input type="text" name="code" placeholder="e.g. DSA, LIB, GUIDANCE" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Official Office Name</label>
+                        <input type="text" name="name" placeholder="e.g. Student Affairs Office" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Building & Room Location</label>
+                        <input type="text" name="building_location" placeholder="e.g. Student Center Rm 102" required>
+                    </div>
+                    <button type="submit" class="btn-add">Save Office</button>
+                </form>
+            </div>
+
+            <!-- Office List -->
+            <div class="panel">
+                <h2>🏢 Registered Campus Offices</h2>
+                <p class="sub">Active departments available for document routing</p>
+
+                {% for off in offices %}
+                    <div class="office-card">
+                        <div>
+                            <h4 style="font-size: 0.95rem; font-weight: 800; color: #0f172a;">{{ off.name }}</h4>
+                            <span style="font-size: 0.8rem; color: #64748b;">📍 {{ off.building_location|default:"Main Campus" }}</span>
+                        </div>
+                        <span class="code-pill">{{ off.code }}</span>
+                    </div>
+                {% empty %}
+                    <p style="color: #64748b; font-size: 0.9rem;">No offices registered yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>
