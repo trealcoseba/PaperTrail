@@ -1,0 +1,90 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperTrail - System Audit Trail</title>
+    <link rel="stylesheet" href="{% static 'css/home/home.css' %}">
+    <style>
+        .audit-container { max-width: 1000px; width: 100%; margin: 2rem auto; background: white; padding: 2.5rem; border-radius: 20px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; }
+        .filter-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+        .filter-form { display: flex; gap: 0.5rem; }
+        select { padding: 0.5rem 0.8rem; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; background: white; }
+        .btn-filter { background: #4f46e5; color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+        .audit-table { width: 100%; border-collapse: collapse; }
+        .audit-table th { background: #f1f5f9; padding: 12px; text-align: left; font-size: 0.75rem; color: #475569; text-transform: uppercase; font-weight: 700; }
+        .audit-table td { padding: 12px; font-size: 0.85rem; border-bottom: 1px solid #f1f5f9; }
+        .action-badge { background: #e0e7ff; color: #3730a3; padding: 3px 8px; border-radius: 5px; font-weight: 700; font-size: 0.75rem; font-family: monospace; }
+        .ip-tag { color: #64748b; font-family: monospace; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="brand"><span>📄</span> PaperTrail</div>
+            <div class="nav-links">
+                <a href="{% url 'home:home' %}">Home</a>
+                <a href="{% url 'documents:create' %}">New Request</a>
+                <a href="{% url 'documents:queue' %}">Office Queue</a>
+                <a href="{% url 'workflows:builder' %}">Workflows</a>
+                <a href="{% url 'offices:directory' %}">Offices</a>
+                <a href="{% url 'audit_logs:list' %}" class="active">Audit Trail</a>
+                <a href="{% url 'documents:search' %}">Search</a>
+                <a href="{% url 'notifications:list' %}">Notifications</a>
+                <a href="{% url 'home:logout' %}" class="btn-logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <div class="audit-container">
+            <div class="filter-row">
+                <div>
+                    <h2 style="font-size: 1.5rem; font-weight: 800; color: #1e293b;">🛡️ System Audit Trail</h2>
+                    <p style="font-size: 0.85rem; color: #64748b;">Accountability log of all tracking and processing events</p>
+                </div>
+
+                <form method="get" class="filter-form">
+                    <select name="action">
+                        <option value="">All Event Types</option>
+                        {% for at in action_types %}
+                            <option value="{{ at }}" {% if action_filter == at %}selected{% endif %}>{{ at }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn-filter">Filter</button>
+                </form>
+            </div>
+
+            <table class="audit-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Actor</th>
+                        <th>Action Type</th>
+                        <th>IP Address</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                        <tr>
+                            <td style="color: #64748b; white-space: nowrap;">{{ log.timestamp|date:"M d, Y h:i A" }}</td>
+                            <td><strong>{{ log.actor.username|default:"System" }}</strong></td>
+                            <td><span class="action-badge">{{ log.action_type }}</span></td>
+                            <td><span class="ip-tag">{{ log.ip_address|default:"127.0.0.1" }}</span></td>
+                            <td>{{ log.details }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 2.5rem; color: #64748b;">
+                                No audit events recorded yet. Submit, approve, or revise a document to log activity!
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+</body>
+</html>

@@ -2,25 +2,26 @@ import random
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
+from django.db.models import Q
+
 from .models import DocumentRequest, DocumentStageLog
 from apps.workflows.models import WorkflowTemplate, WorkflowTemplateStep
 from apps.offices.models import Office
 from apps.notifications.models import Notification
-from django.db.models import Q
+from apps.audit_logs.utils import log_audit_event
+
 
 def ensure_default_workflow_steps(template):
     """Guarantees that a template always has all 5 required sequential stages."""
     Office.objects.filter(code="DEAN_ENG").update(code="DEAN")
 
     if template.steps.count() < 5:
-        # 1. Create or get standard campus offices
         off_chair, _ = Office.objects.get_or_create(code="DEPT_CHAIR", defaults={"name": "Department Chair Office", "building_location": "CS Bldg Rm 201"})
-        off_dean, _ = Office.objects.get_or_create(code="DEAN", defaults={"name": "Dean's Office", "building_location": "NGE"})
-        off_reg, _ = Office.objects.get_or_create(code="REGISTRAR", defaults={"name": "University Registrar", "building_location": "RTL"})
-        off_cashier, _ = Office.objects.get_or_create(code="CASHIER", defaults={"name": "Accounting & Cashier", "building_location": "RTL"})
+        off_dean, _ = Office.objects.get_or_create(code="DEAN", defaults={"name": "College Dean's Office", "building_location": "Main Wing Rm 302"})
+        off_reg, _ = Office.objects.get_or_create(code="REGISTRAR", defaults={"name": "University Registrar", "building_location": "Admin Bldg Rm 101"})
+        off_cashier, _ = Office.objects.get_or_create(code="CASHIER", defaults={"name": "Accounting & Cashier", "building_location": "Finance Bldg Rm 104"})
         off_vpaa, _ = Office.objects.get_or_create(code="VPAA", defaults={"name": "Office of Academic Affairs", "building_location": "Admin Bldg Rm 401"})
 
-        # 2. Attach the 5 sequential steps to the template
         WorkflowTemplateStep.objects.get_or_create(template=template, step_order=1, defaults={"office": off_chair, "required_action": "Initial Evaluation & Endorsement", "expected_duration_days": 1})
         WorkflowTemplateStep.objects.get_or_create(template=template, step_order=2, defaults={"office": off_dean, "required_action": "Dean Review & Signature", "expected_duration_days": 1})
         WorkflowTemplateStep.objects.get_or_create(template=template, step_order=3, defaults={"office": off_reg, "required_action": "Scholastic Record Verification", "expected_duration_days": 2})
@@ -71,7 +72,6 @@ def create_document_view(request):
                 remarks="Document received into department chair queue.",
                 entered_at=timezone.now()
             )
-
             Notification.objects.create(
                 user=request.user,
                 document=doc,
@@ -79,6 +79,7 @@ def create_document_view(request):
                 message=f"Your document '{doc.document_title}' has been submitted to {first_step.office.name}."
             )
 
+        log_audit_event(request, "DOCUMENT_SUBMITTED", f"Submitted {doc.tracking_number}: {doc.document_title}")
         return redirect("documents:track", tracking_number=doc.tracking_number)
 
     return render(request, "documents/create_request.html", {"templates": templates})
@@ -87,13 +88,10 @@ def create_document_view(request):
 @login_required
 def tracker_view(request, tracking_number):
     document = get_object_or_404(DocumentRequest, tracking_number=tracking_number)
-    
-    # Ensure steps exist for this document's template
     ensure_default_workflow_steps(document.template)
 
     steps = document.template.steps.all().order_by("step_order")
-    
-    # If no initial log exists, create Step 1 log automatically
+
     if document.stage_logs.count() == 0 and steps.exists():
         DocumentStageLog.objects.create(
             document=document,
@@ -117,11 +115,9 @@ def tracker_view(request, tracking_number):
         "next_step": next_step,
     })
 
-# Append to the bottom of apps/documents/views.py
 
 @login_required
 def office_queue_view(request):
-    """Office Staff Dashboard: View all documents waiting at an office stage."""
     all_documents = DocumentRequest.objects.all().order_by("-submitted_at")
     pending_docs = all_documents.filter(status__in=["Submitted", "Under Review"])
     returned_docs = all_documents.filter(status="Returned")
@@ -137,7 +133,6 @@ def office_queue_view(request):
 
 @login_required
 def process_document_view(request, tracking_number):
-    """Action Screen: Allows staff to Approve & Advance, or Return for Revision."""
     doc = get_object_or_404(DocumentRequest, tracking_number=tracking_number)
     steps = doc.template.steps.all().order_by("step_order")
     current_step = steps.filter(step_order=doc.current_step_order).first()
@@ -146,9 +141,9 @@ def process_document_view(request, tracking_number):
     if request.method == "POST":
         action = request.POST.get("action")
         remarks = request.POST.get("remarks", "").strip()
+        target_office = current_step.office if current_step else steps.first().office
 
         if action == "approve":
-            # If there is another step, advance to next stage
             if next_step:
                 doc.current_step_order += 1
                 doc.status = "Under Review"
@@ -162,19 +157,19 @@ def process_document_view(request, tracking_number):
             DocumentStageLog.objects.create(
                 document=doc,
                 step_order=doc.current_step_order,
-                office=current_step.office if current_step else doc.template.steps.first().office,
+                office=target_office,
                 actor=request.user,
                 action_taken=action_text,
                 remarks=remarks if remarks else "Approved without remarks.",
                 entered_at=timezone.now()
             )
-
             Notification.objects.create(
-                user=request.user,
+                user=doc.student,
                 document=doc,
-                title=f"Request Submitted: {doc.tracking_number}",
-                message=f"Your document '{doc.document_title}' has been submitted to {first_step.office.name}."
+                title=f"Stage Approved: {doc.tracking_number}",
+                message=f"Update on '{doc.document_title}': {action_text}. Remarks: {remarks or 'None'}"
             )
+            log_audit_event(request, "STAGE_APPROVED", f"{doc.tracking_number} - {action_text}")
 
         elif action == "return":
             doc.status = "Returned"
@@ -183,19 +178,19 @@ def process_document_view(request, tracking_number):
             DocumentStageLog.objects.create(
                 document=doc,
                 step_order=doc.current_step_order,
-                office=current_step.office if current_step else doc.template.steps.first().office,
+                office=target_office,
                 actor=request.user,
                 action_taken="Returned for Revision",
                 remarks=remarks if remarks else "Document returned: Additional requirements needed.",
                 entered_at=timezone.now()
             )
-
             Notification.objects.create(
                 user=doc.student,
                 document=doc,
                 title=f"Action Required: {doc.tracking_number} Returned",
-                message=f"'{doc.document_title}' was returned by {current_step.office.name if current_step else 'Office'}. Reason: {remarks or 'Additional requirements needed.'}"
+                message=f"'{doc.document_title}' was returned by {target_office.name}. Reason: {remarks or 'Additional requirements needed.'}"
             )
+            log_audit_event(request, "DOCUMENT_RETURNED", f"{doc.tracking_number} returned. Reason: {remarks}")
 
         return redirect("documents:track", tracking_number=doc.tracking_number)
 
@@ -205,40 +200,12 @@ def process_document_view(request, tracking_number):
         "next_step": next_step,
     })
 
-@login_required
-def search_documents_view(request):
-    """Search & Filter documents by tracking number, title, purpose, or status."""
-    query = request.GET.get("q", "").strip()
-    status_filter = request.GET.get("status", "").strip()
-
-    results = DocumentRequest.objects.all().order_by("-submitted_at")
-
-    if query:
-        results = results.filter(
-            Q(tracking_number__icontains=query) |
-            Q(document_title__icontains=query) |
-            Q(purpose__icontains=query) |
-            Q(student__username__icontains=query)
-        )
-
-    if status_filter:
-        results = results.filter(status=status_filter)
-
-    return render(request, "documents/search.html", {
-        "results": results,
-        "query": query,
-        "status_filter": status_filter,
-        "result_count": results.count(),
-    })
 
 @login_required
 def revise_document_view(request, tracking_number):
-    """Allows a student to view return remarks, edit details, and resubmit a Returned document."""
     doc = get_object_or_404(DocumentRequest, tracking_number=tracking_number, student=request.user)
     steps = doc.template.steps.all().order_by("step_order")
     current_step = steps.filter(step_order=doc.current_step_order).first()
-    
-    # Get the latest return reason from stage logs
     return_log = doc.stage_logs.filter(action_taken="Returned for Revision").order_by("-entered_at").first()
 
     if request.method == "POST":
@@ -260,13 +227,13 @@ def revise_document_view(request, tracking_number):
             remarks=revision_note if revision_note else "Student updated and resubmitted the document.",
             entered_at=timezone.now()
         )
-
         Notification.objects.create(
             user=request.user,
             document=doc,
             title=f"Document Resubmitted: {doc.tracking_number}",
             message=f"'{doc.document_title}' has been resubmitted to {target_office.name} for review."
         )
+        log_audit_event(request, "DOCUMENT_RESUBMITTED", f"Revised and resubmitted {doc.tracking_number}")
 
         return redirect("documents:track", tracking_number=doc.tracking_number)
 
@@ -274,4 +241,30 @@ def revise_document_view(request, tracking_number):
         "document": doc,
         "current_step": current_step,
         "return_log": return_log,
+    })
+
+
+@login_required
+def search_documents_view(request):
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "").strip()
+
+    results = DocumentRequest.objects.all().order_by("-submitted_at")
+
+    if query:
+        results = results.filter(
+            Q(tracking_number__icontains=query) |
+            Q(document_title__icontains=query) |
+            Q(purpose__icontains=query) |
+            Q(student__username__icontains=query)
+        )
+
+    if status_filter:
+        results = results.filter(status=status_filter)
+
+    return render(request, "documents/search.html", {
+        "results": results,
+        "query": query,
+        "status_filter": status_filter,
+        "result_count": results.count(),
     })
